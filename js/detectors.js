@@ -108,11 +108,20 @@ export const TAGS = [
   },
 ];
 
-// Tags deliberately not included, shown on the page so nobody wonders.
+// Tags that need the desktop app (they cannot run in a browser). Shown greyed out on the page.
+// "Planned" means source/licence still has to be verified before it ships.
+export const DESKTOP_ONLY = [
+  { name: 'CCTag', family: 'Circular · rings', license: 'MPL-2.0', note: 'C++ with Boost/OpenCV' },
+  { name: 'ARToolKit', family: 'Square · pattern/matrix', license: 'LGPL', note: 'Needs camera calibration files' },
+  { name: 'reacTIVision (amoeba)', family: 'Topological', license: 'GPL', note: 'Desktop C++ program' },
+  { name: 'WhyCon', family: 'Circular', license: 'to be verified', note: 'Desktop C++ program' },
+  { name: 'ChromaTag', family: 'Square · colour', license: 'to be verified', note: 'Desktop C++ program' },
+  { name: 'RuneTag', family: 'Circular · dots', license: 'to be verified', note: 'Desktop C++ program' },
+];
+
+// Tags deliberately not included anywhere, shown on the page so nobody wonders.
 export const SKIPPED = [
-  ['TopoTag', 'Source is C++/OpenCV and released “for research purposes only, no commercial use”; no browser build exists.'],
-  ['CCTag', 'C++ with Boost/OpenCV (CUDA optional). No practical WebAssembly build exists.'],
-  ['RuneTag, Pi-Tag, Prasad et al., Cho et al., Knyaz et al., Tateno et al., FourierTag, InterSense, SIFTTag, ChromaTag', 'No public detector source that could run here, or no source at all.'],
-  ['ARToolKit / ARToolKitPlus, ARTag, binARyID, CyberCode, VisualCode, Matrix', 'Obsolete or superseded by AprilTag/ArUco; ARToolKit’s WASM build needs camera-calibration files and is planned separately. ARTag is closed-source.'],
-  ['reacTIVision / D-touch, BullsEye, WhyCon, CCC', 'Only GPL desktop programs or papers; a faithful browser detector would be my own re-implementation and would measure my code, not the original.'],
+  ['TopoTag', 'Released “for research purposes only”; redistribution unclear. Skipped to stay on the safe side.'],
+  ['Pi-Tag, Prasad et al., Cho et al., Knyaz et al., Tateno et al., FourierTag, InterSense, SIFTTag, CCC, BullsEye, D-touch', 'No public detector source found, or licence unclear.'],
+  ['ARTag, binARyID, CyberCode, VisualCode, Matrix, ARToolKitPlus', 'Closed-source, obsolete, or superseded by AprilTag/ArUco.'],
 ];

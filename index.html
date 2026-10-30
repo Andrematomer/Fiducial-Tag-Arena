@@ -10,12 +10,13 @@
 <body>
 <header>
   <h1>Fiducial Tag Arena</h1>
+  <p><a class="dl" href="https://github.com/Andrematomer/Fiducial-Tag-Arena/releases" target="_blank" rel="noopener">⬇ Download desktop app (more tags, not released yet)</a></p>
   <p>Stress-test fiducial marker detectors in your browser. No printing, no camera, no tape measure: every frame is generated at runtime, and every tag gets the exact same degraded conditions.</p>
 </header>
 
 <main>
   <section class="panel" id="p-tags">
-    <h2>1 · Choose tags <small>Detectors download only when you tick them.</small></h2>
+    <h2>1 · Choose tags <small>Detectors download only when you tick them. Greyed-out tags need the desktop app.</small></h2>
     <div id="tagList" class="tags"></div>
   </section>
 
@@ -60,7 +61,7 @@
       <li><b>Not apples-to-apples by design.</b> Tags differ in ID capacity, pose output and intended use. This page measures only how reliably each one is found under bad conditions.</li>
       <li>Results depend on the JavaScript/WASM implementations used here, not necessarily on the original papers’ detectors.</li>
     </ul>
-    <h2>Tags not included</h2>
+    <h2>Tags not included anywhere</h2>
     <ul id="skipped"></ul>
   </section>
 </main>

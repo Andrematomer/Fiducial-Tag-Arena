@@ -49,3 +49,9 @@ details:not([data-on="1"]) .vars { opacity: .45; }
 .notes code { color: var(--fg); }
 #status { color: var(--dim); }
 footer { color: var(--dim); font-size: 12px; padding-bottom: 30px; }
+
+.tag-chip.locked { position: relative; cursor: default; opacity: .9; }
+.tag-chip.locked > div:first-child { filter: blur(1.5px) grayscale(1); opacity: .45; }
+.tag-chip .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:8px; font-size:12px; font-weight:600; color:var(--fg); background:rgba(15,17,21,.55); border-radius:8px; }
+a.dl { display:inline-block; background:var(--acc); color:#06101f; font-weight:600; padding:8px 14px; border-radius:6px; text-decoration:none; }
+header p a.dl { margin-bottom: 4px; }

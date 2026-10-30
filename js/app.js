@@ -1,5 +1,5 @@
 import { CATEGORIES, FRAME_SIZES, defaultSettings, resolveParams, renderFrame, mulberry32 } from './degrade.js';
-import { TAGS, SKIPPED } from './detectors.js';
+import { TAGS, SKIPPED, DESKTOP_ONLY } from './detectors.js';
 
 const $ = (s) => document.querySelector(s);
 let settings = defaultSettings();
@@ -21,6 +21,12 @@ for (const t of TAGS) {
   tagList.appendChild(chip);
   chip.querySelector('input').addEventListener('change', (e) => toggleTag(t, e.target.checked, chip));
   idCfg.set(t.key, { mode: 'random', value: 0 });
+}
+for (const t of DESKTOP_ONLY) {
+  const chip = document.createElement('div');
+  chip.className = 'tag-chip locked';
+  chip.innerHTML = `<div><b>${t.name}</b><span>${t.family} · ${t.license}</span><span>${t.note}</span></div><div class="overlay">Not available in the browser version due to browser limitations. Planned for the desktop app.</div>`;
+  tagList.appendChild(chip);
 }
 const skippedEl = $('#skipped');
 for (const [n, why] of SKIPPED) { const li = document.createElement('li'); li.innerHTML = `<b>${n}</b>: ${why}`; skippedEl.appendChild(li); }
