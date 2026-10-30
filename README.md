@@ -1,3 +1,6 @@
+> **⚠️ Work in progress: not ready and not supported.**
+> This repository is an early prototype. It is incomplete, may break or change at any time, and is not intended for use yet. No support is provided.
+
 # Fiducial Tag Arena
 
 Browser-based stress test for fiducial marker detectors. All frames are synthesized at runtime (perspective, lens bulge, occlusion, uneven lighting, motion blur, exposure, low resolution/mosaic, sensor noise); every tag gets identical conditions and is timed one at a time.
