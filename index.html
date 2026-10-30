@@ -8,65 +8,59 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<header>
-  <h1>Fiducial Tag Arena</h1>
-  <p><a class="dl" href="https://github.com/Andrematomer/Fiducial-Tag-Arena/releases" target="_blank" rel="noopener">⬇ Download desktop app (more tags, not released yet)</a></p>
-  <p>Stress-test fiducial marker detectors in your browser. No printing, no camera, no tape measure: every frame is generated at runtime, and every tag gets the exact same degraded conditions.</p>
-</header>
+<div class="app">
+  <section class="left">
+    <header>
+      <div>
+        <h1>Fiducial Tag Arena</h1>
+        <p>Stress-test fiducial marker detectors in your browser. Every frame is generated at runtime and every tag gets the exact same degraded conditions. Tick a tag to enable it (its detector downloads only then), then press <b>Run once</b>.</p>
+      </div>
+      <a class="dl" href="https://github.com/Andrematomer/Fiducial-Tag-Arena/releases" target="_blank" rel="noopener">⬇ Download desktop app<small>more tags · not released yet</small></a>
+    </header>
 
-<main>
-  <section class="panel" id="p-tags">
-    <h2>1 · Choose tags <small>Detectors download only when you tick them. Greyed-out tags need the desktop app.</small></h2>
-    <div id="tagList" class="tags"></div>
+    <div id="grid" class="grid" aria-live="polite"></div>
+
+    <section class="panel notes">
+      <h2>How it works</h2>
+      <ul>
+        <li><b>One detection per tick, not a live loop.</b> Each enabled tag is run one at a time (the highlighted window), starting from a different tag every tick, so no two detectors compete for the CPU while being timed.</li>
+        <li><b>Run once = one tick.</b> Every tick draws a new seed, so random IDs, occluder placement, noise and (in Random mode) all parameters change, but identically for every tag.</li>
+        <li><b>Timing</b> covers only the detector call. Rendering the frame is never included. It is not perfectly even: ArUco’s call also includes its own RGBA→gray conversion, and AprilTag’s includes copying the image into WASM memory and parsing its JSON result. Browser timers are coarse (about 0.1 ms).</li>
+        <li><b>Success</b> means the detector returned the correct ID with its centre within 25% of the tag side from the true centre. A miss, a wrong ID or a wrong place all count as failure. The strip under each tag shows the last 128 ticks; the percentage covers all ticks.</li>
+        <li><b>Camera model.</b> Tag size is the zoom; the lens-shift sliders work like Blender’s camera shift: the tag stays in the middle of the frame while being viewed off-axis, which adds perspective and lens distortion as if it were near the frame edge. If a rotated plane would pass through the camera it is pushed back automatically.</li>
+        <li><b>Preview.</b> The top-right window shows a blank plane with exactly the slider values (the maximum in Random mode). Use the three round buttons on it: drag to rotate, zoom, or shift.</li>
+        <li><b>Not apples-to-apples by design.</b> Tags differ in ID capacity, pose output and intended use. This page measures only how reliably each one is found under bad conditions. Results reflect the JavaScript/WASM implementations used here, not necessarily the original papers’ detectors.</li>
+      </ul>
+      <h2>Tags not included anywhere</h2>
+      <ul id="skipped"></ul>
+      <p class="foot">Detectors: AprilTag (BSD-3-Clause, AprilRobotics / CONIX apriltag-js-standalone), js-aruco2 (MIT). Licences are in <code>vendor/</code>.</p>
+    </section>
   </section>
 
-  <section class="panel" id="p-settings">
-    <h2>2 · Test conditions</h2>
-    <div class="row">
-      <label>Frame size <select id="frameSize"></select></label>
-      <label>Seed <input id="seed" type="number" value="1" min="0" step="1"></label>
-      <button id="reseed" title="New random seed">🎲</button>
-      <label class="mode">
-        <input type="radio" name="mode" value="exact" checked> Exact: use sliders as set
-      </label>
-      <label class="mode">
-        <input type="radio" name="mode" value="random"> Random: sliders are maximums
-      </label>
-      <button id="resetSettings">Reset settings</button>
+  <aside class="right">
+    <div class="top">
+      <div class="cell pv">
+        <div class="chead"><b>Preview</b><em id="pvInfo"></em></div>
+        <div class="view">
+          <canvas id="pv" width="128" height="128"></canvas>
+          <div class="gizmo" aria-label="Viewport navigation">
+            <button id="gRot" title="Drag to rotate the plane" aria-label="Rotate"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button id="gZoom" title="Drag up/down to zoom" aria-label="Zoom"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5.5 5.5M8 10.5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+            <button id="gPan" title="Drag to shift the lens" aria-label="Shift"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="runbar">
+        <button id="runOnce" class="primary">Run once</button>
+        <span class="ticks"><input id="ticks" type="number" value="32" min="1" max="500" aria-label="Number of ticks"><button id="runTicks" class="primary">Run ticks</button></span>
+        <button id="stop" disabled>Stop</button>
+        <button id="clear">Clear</button>
+        <span id="status" aria-live="polite"></span>
+      </div>
     </div>
-    <div id="cats"></div>
-  </section>
-
-  <section class="panel" id="p-run">
-    <h2>3 · Run</h2>
-    <div class="row">
-      <button id="runOnce" class="primary">Run once</button>
-      <label>or run <input id="ticks" type="number" value="10" min="1" max="500"> ticks (random, one tag at a time)</label>
-      <button id="runTicks" class="primary">Run ticks</button>
-      <button id="stop" disabled>Stop</button>
-      <button id="clear">Clear results</button>
-      <span id="status" aria-live="polite"></span>
-    </div>
-  </section>
-
-  <section id="grid" class="grid" aria-live="polite"></section>
-
-  <section class="panel notes">
-    <h2>How it works</h2>
-    <ul>
-      <li><b>One detection per frame, not a live loop.</b> Each tag is run one at a time, in a rotating order, so no two detectors compete for the CPU while being timed.</li>
-      <li><b>Timing</b> covers only the detector call (<code>performance.now()</code> before and after). Frame synthesis, grayscale conversion for AprilTag, and drawing are excluded. ArUco’s library converts RGBA to gray internally, so that step is included for ArUco. Browser timers are coarse (around 0.1 ms), so very fast detections are rounded.</li>
-      <li><b>Success</b> means the detector returned the correct ID with its centre within 25% of the tag side from the true centre. Anything else (missed, wrong ID, wrong place) is a failure.</li>
-      <li><b>Fairness.</b> The black outer square of every tag is drawn at the same pixel size and pose. Shape positions, noise and all random parameters come from the same seeded streams for every tag in a tick.</li>
-      <li><b>Not apples-to-apples by design.</b> Tags differ in ID capacity, pose output and intended use. This page measures only how reliably each one is found under bad conditions.</li>
-      <li>Results depend on the JavaScript/WASM implementations used here, not necessarily on the original papers’ detectors.</li>
-    </ul>
-    <h2>Tags not included anywhere</h2>
-    <ul id="skipped"></ul>
-  </section>
-</main>
-
-<footer>Detectors: AprilTag (BSD-3-Clause, AprilRobotics / CONIX apriltag-js-standalone), js-aruco2 (MIT). Licences are in <code>vendor/</code>.</footer>
+    <div class="scroll" id="cats"></div>
+  </aside>
+</div>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

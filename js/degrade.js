@@ -1,6 +1,6 @@
 // Runtime scene synthesis + camera degradation pipeline.
 // Everything is generated procedurally; no photos. All tags receive the exact same
-// parameters AND the same random streams (shapes, noise) so the comparison is fair.
+// parameters AND the same random streams (shapes, noise, shadows) so the comparison is fair.
 
 export function mulberry32(a) {
   return function () {
@@ -11,71 +11,68 @@ export function mulberry32(a) {
   };
 }
 function randn(rng) {
-  let u = 0, v = 0;
+  let u = 0;
   while (u === 0) u = rng();
-  v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
 }
 
 // ---------------------------------------------------------------------------
 // Setting definitions. These drive both the UI and the random sampling.
-// kind: 'amp'   random mode samples U(0, value)
-//       'sym'   random mode samples U(-value, value)
-//       'angle' random mode samples U(0, 360)
-//       'fixed' random mode uses the value as is
+// kind (random mode): 'amp' U(0,v) · 'sym' U(-|v|,|v|) · 'angle' U(0,360) · 'fixed' v
+// type: 'range' (default) · 'select' (opts [[value,label]]) · 'number'
 // ---------------------------------------------------------------------------
+const SIZES = [16, 32, 64, 128, 256, 512, 1024].map(s => [s, `${s} × ${s}`]);
+
 export const CATEGORIES = [
-  { id: 'frame', title: 'Frame & placement', on: true, always: true, vars: [
-    { id: 'tagPct', label: 'Tag size (% of frame height)', min: 3, max: 90, step: 1, def: 40, kind: 'fixed' },
-    { id: 'offX', label: 'Offset X (% of frame)', min: 0, max: 40, step: 1, def: 0, kind: 'sym' },
-    { id: 'offY', label: 'Offset Y (% of frame)', min: 0, max: 40, step: 1, def: 0, kind: 'sym' },
+  { id: 'frame', title: 'Test setup & camera', on: true, always: true, open: true, vars: [
+    { id: 'size', type: 'select', label: 'Frame size (square)', opts: SIZES, def: 128 },
+    { id: 'mode', type: 'select', label: 'Parameter mode', opts: [['random', 'Random each tick (sliders = maximum)'], ['exact', 'Exact (sliders as set)']], def: 'random' },
+    { id: 'seed', type: 'number', label: 'Base seed', min: 0, max: 999999, step: 1, def: 1 },
+    { id: 'tagPct', label: 'Tag size / zoom (% of frame)', min: 3, max: 95, step: 1, def: 50, kind: 'fixed' },
+    { id: 'shiftX', label: 'Lens shift X (% of frame)', min: -50, max: 50, step: 1, def: 15, kind: 'sym' },
+    { id: 'shiftY', label: 'Lens shift Y (% of frame)', min: -50, max: 50, step: 1, def: 10, kind: 'sym' },
     { id: 'bg', label: 'Background brightness', min: 0, max: 255, step: 1, def: 150, kind: 'fixed' },
-    { id: 'bgTex', label: 'Background clutter', min: 0, max: 100, step: 1, def: 0, kind: 'amp' },
+    { id: 'bgTex', label: 'Background clutter', min: 0, max: 100, step: 1, def: 30, kind: 'amp' },
   ]},
-  { id: 'persp', title: '3D rotation (perspective)', on: false, vars: [
-    { id: 'yaw', label: 'Yaw (°)', min: 0, max: 88, step: 1, def: 30, kind: 'sym' },
-    { id: 'pitch', label: 'Pitch (°)', min: 0, max: 88, step: 1, def: 30, kind: 'sym' },
-    { id: 'roll', label: 'Roll (°)', min: 0, max: 180, step: 1, def: 20, kind: 'sym' },
-    { id: 'fov', label: 'Camera field of view (°, wide = stronger perspective)', min: 20, max: 140, step: 1, def: 60, kind: 'fixed' },
+  { id: 'persp', title: '3D rotation (perspective)', on: true, open: true, vars: [
+    { id: 'yaw', label: 'Yaw (°)', min: -88, max: 88, step: 1, def: 45, kind: 'sym' },
+    { id: 'pitch', label: 'Pitch (°)', min: -88, max: 88, step: 1, def: 35, kind: 'sym' },
+    { id: 'roll', label: 'Roll (°)', min: -180, max: 180, step: 1, def: 30, kind: 'sym' },
+    { id: 'fov', label: 'Field of view (°, wide = stronger perspective)', min: 20, max: 140, step: 1, def: 70, kind: 'fixed' },
   ]},
-  { id: 'lens', title: 'Lens distortion', on: false, vars: [
-    { id: 'bulge', label: 'Bulge k1 (+ barrel / − pincushion)', min: 0, max: 1.5, step: 0.01, def: 0.4, kind: 'sym' },
+  { id: 'lens', title: 'Lens distortion', on: true, vars: [
+    { id: 'bulge', label: 'Bulge k1 (+ barrel / − pincushion)', min: -1.5, max: 1.5, step: 0.01, def: 0.4, kind: 'sym' },
+    { id: 'ca', label: 'Chromatic aberration (R/B radial split)', min: 0, max: 0.2, step: 0.002, def: 0.04, kind: 'amp' },
   ]},
-  { id: 'occ', title: 'Occlusion', on: false, vars: [
+  { id: 'occ', title: 'Occlusion', on: true, vars: [
     { id: 'cover', label: 'Coverage (% of tag area)', min: 0, max: 80, step: 1, def: 15, kind: 'amp' },
     { id: 'count', label: 'Number of occluders', min: 1, max: 12, step: 1, def: 3, kind: 'fixed' },
-    { id: 'shape', label: 'Shape (0 rect, 1 ellipse, 2 scratch line, 3 mixed)', min: 0, max: 3, step: 1, def: 3, kind: 'fixed' },
-    { id: 'tone', label: 'Colour (0 black, 1 white, 2 gray, 3 random)', min: 0, max: 3, step: 1, def: 3, kind: 'fixed' },
+    { id: 'shape', type: 'select', label: 'Shape', opts: [[0, 'Rectangle'], [1, 'Ellipse'], [2, 'Scratch line'], [3, 'Mixed']], def: 3 },
+    { id: 'tone', type: 'select', label: 'Colour', opts: [[0, 'Black'], [1, 'White'], [2, 'Gray'], [3, 'Random']], def: 3 },
   ]},
-  { id: 'light', title: 'Uneven lighting', on: false, vars: [
-    { id: 'grad', label: 'Gradient strength', min: 0, max: 1, step: 0.01, def: 0.6, kind: 'amp' },
+  { id: 'light', title: 'Uneven lighting', on: true, vars: [
+    { id: 'grad', label: 'Gradient strength (across the tag)', min: 0, max: 1, step: 0.01, def: 0.35, kind: 'amp' },
     { id: 'gradAng', label: 'Gradient direction (°)', min: 0, max: 360, step: 1, def: 30, kind: 'angle' },
-    { id: 'vig', label: 'Vignette', min: 0, max: 1, step: 0.01, def: 0, kind: 'amp' },
-    { id: 'glare', label: 'Glare hotspot strength', min: 0, max: 1, step: 0.01, def: 0, kind: 'amp' },
+    { id: 'shadow', label: 'Hard cast shadow', min: 0, max: 1, step: 0.01, def: 0.3, kind: 'amp' },
+    { id: 'glare', label: 'Glare hotspot', min: 0, max: 1, step: 0.01, def: 0.25, kind: 'amp' },
+    { id: 'vig', label: 'Vignette (around the lens axis)', min: 0, max: 1, step: 0.01, def: 0.3, kind: 'amp' },
   ]},
-  { id: 'blur', title: 'Motion blur', on: false, vars: [
-    { id: 'blurLen', label: 'Intensity (length px)', min: 0, max: 80, step: 1, def: 12, kind: 'amp' },
+  { id: 'blur', title: 'Motion blur', on: true, vars: [
+    { id: 'blurLen', label: 'Intensity (length px)', min: 0, max: 80, step: 1, def: 4, kind: 'amp' },
     { id: 'blurAng', label: 'Direction (°)', min: 0, max: 180, step: 1, def: 0, kind: 'angle' },
-    { id: 'defocus', label: 'Defocus blur radius (px)', min: 0, max: 20, step: 0.5, def: 0, kind: 'amp' },
+    { id: 'defocus', label: 'Defocus blur radius (px)', min: 0, max: 20, step: 0.5, def: 0.5, kind: 'amp' },
   ]},
-  { id: 'expo', title: 'Exposure (extreme bright / dark)', on: false, vars: [
-    { id: 'ev', label: 'Exposure (EV stops, + bright / − dark)', min: 0, max: 5, step: 0.1, def: 2, kind: 'sym' },
+  { id: 'expo', title: 'Exposure (extreme bright / dark)', on: true, vars: [
+    { id: 'ev', label: 'Exposure (EV stops, + bright / − dark)', min: -5, max: 5, step: 0.1, def: 0.7, kind: 'sym' },
     { id: 'contrast', label: 'Contrast ×', min: 0.1, max: 2, step: 0.05, def: 1, kind: 'fixed' },
     { id: 'gamma', label: 'Gamma', min: 0.3, max: 3, step: 0.05, def: 1, kind: 'fixed' },
   ]},
-  { id: 'res', title: 'Low resolution / mosaic', on: false, vars: [
-    { id: 'block', label: 'Block size (px)', min: 1, max: 24, step: 1, def: 4, kind: 'amp' },
-    { id: 'mosaic', label: 'Style (0 smooth, 1 hard mosaic)', min: 0, max: 1, step: 1, def: 1, kind: 'fixed' },
-    { id: 'levels', label: 'Brightness levels (posterize)', min: 2, max: 256, step: 1, def: 256, kind: 'fixed' },
-  ]},
-  { id: 'noise', title: 'Sensor noise', on: false, vars: [
-    { id: 'luma', label: 'Luminance noise σ', min: 0, max: 100, step: 1, def: 20, kind: 'amp' },
-    { id: 'chroma', label: 'Colour noise σ', min: 0, max: 100, step: 1, def: 20, kind: 'amp' },
-    { id: 'sp', label: 'Salt & pepper (% of pixels)', min: 0, max: 20, step: 0.1, def: 0, kind: 'amp' },
+  { id: 'noise', title: 'Sensor noise', on: true, vars: [
+    { id: 'luma', label: 'Luminance noise σ', min: 0, max: 100, step: 1, def: 12, kind: 'amp' },
+    { id: 'chroma', label: 'Colour noise σ', min: 0, max: 100, step: 1, def: 10, kind: 'amp' },
+    { id: 'sp', label: 'Salt & pepper (% of pixels)', min: 0, max: 20, step: 0.1, def: 0.3, kind: 'amp' },
   ]},
 ];
-
-export const FRAME_SIZES = { '320×240': [320, 240], '640×480': [640, 480], '1280×720': [1280, 720] };
 
 export function defaultSettings() {
   const s = {};
@@ -87,6 +84,7 @@ export function defaultSettings() {
 }
 
 // Resolve settings to concrete parameters. random=true: sliders are maxima.
+// The RNG is consumed in a fixed order so every tag in a tick gets identical values.
 export function resolveParams(settings, random, rng) {
   const P = {};
   for (const c of CATEGORIES) {
@@ -95,10 +93,11 @@ export function resolveParams(settings, random, rng) {
     P[c.id] = {};
     for (const v of c.vars) {
       let x = sc[v.id];
-      if (random) {
-        if (v.kind === 'amp') x = rng() * x;
-        else if (v.kind === 'sym') x = (rng() * 2 - 1) * x;
-        else if (v.kind === 'angle') x = rng() * 360;
+      if (random && typeof x === 'number' && v.type !== 'select' && v.type !== 'number') {
+        const r = rng();
+        if (v.kind === 'amp') x = r * x;
+        else if (v.kind === 'sym') x = (r * 2 - 1) * Math.abs(x);
+        else if (v.kind === 'angle') x = r * 360;
       }
       P[c.id][v.id] = x;
     }
@@ -113,8 +112,7 @@ export function resolveParams(settings, random, rng) {
 function inv3(m) {
   const [a, b, c, d, e, f, g, h, i] = m;
   const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
-  const det = a * A + b * B + c * C;
-  const k = 1 / det;
+  const k = 1 / (a * A + b * B + c * C);
   return [A * k, -(b * i - c * h) * k, (b * f - c * e) * k,
           B * k, (a * i - c * g) * k, -(a * f - c * d) * k,
           C * k, -(a * h - b * g) * k, (a * e - b * d) * k];
@@ -128,11 +126,13 @@ function toGrayTexture(canvas) {
   return { g, w, h };
 }
 
-// tag: { canvas, outerFrac } ; outerFrac = black outer square side / whole canvas side
+const NEAR = 0.15;   // nearest allowed point of the tag plane, in tag-side units
+
+// tag: { canvas, outerFrac } ; outerFrac = black outer square side / whole canvas side.
+// Frames are square (W === H). Only the detector call is ever timed, never this function.
 export function renderFrame(tag, P, W, H, seed) {
-  const rngBg = mulberry32(seed ^ 0x1234);
-  const rngOcc = mulberry32(seed ^ 0x5678);
-  const rngNoise = mulberry32(seed ^ 0x9abc);
+  const rngBg = mulberry32(seed ^ 0x1234), rngOcc = mulberry32(seed ^ 0x5678),
+        rngNoise = mulberry32(seed ^ 0x9abc), rngLight = mulberry32(seed ^ 0x2468);
   const F = new Float32Array(W * H * 3);
 
   // ---- background ------------------------------------------------------
@@ -141,41 +141,44 @@ export function renderFrame(tag, P, W, H, seed) {
   const clutter = (fr.bgTex ?? 0) / 100;
   const waves = [];
   for (let k = 0; k < 6; k++) waves.push([rngBg() * 0.06 + 0.01, rngBg() * 0.06 + 0.01, rngBg() * 6.28, rngBg() * 6.28, rngBg()]);
+  const wscale = 128 / Math.max(16, W);          // clutter looks the same at every frame size
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     let t = 0;
-    if (clutter > 0) for (const w of waves) t += w[4] * Math.sin(x * w[0] + w[2]) * Math.sin(y * w[1] + w[3]);
-    const v = bg + clutter * 90 * t;
+    if (clutter > 0) for (const w of waves) t += w[4] * Math.sin(x * w[0] * wscale + w[2]) * Math.sin(y * w[1] * wscale + w[3]);
     const o = (y * W + x) * 3;
-    F[o] = F[o + 1] = F[o + 2] = v;
+    F[o] = F[o + 1] = F[o + 2] = bg + clutter * 90 * t;
   }
 
-  // ---- perspective placement of the tag -------------------------------
+  // ---- placement: rotation + Blender-style lens shift -----------------
   const pr = P.persp || {};
   const yaw = (pr.yaw || 0) * Math.PI / 180, pitch = (pr.pitch || 0) * Math.PI / 180, roll = (pr.roll || 0) * Math.PI / 180;
   const fov = (pr.fov || 60) * Math.PI / 180;
   const f = (H / 2) / Math.tan(fov / 2);
-  const sizePx = (fr.tagPct ?? 40) / 100 * H;
-  const tz = f / sizePx;                       // tag side = 1 unit
-  const cx = W / 2 + ((fr.offX || 0) / 100) * W, cy = H / 2 + ((fr.offY || 0) / 100) * H;
-  const tx = (cx - W / 2) * tz / f, ty = (cy - H / 2) * tz / f;
+  const sizePx = Math.max(2, (fr.tagPct ?? 40) / 100 * H);
+  let tz = f / sizePx;                                 // tag side = 1 unit
+  const sx = (fr.shiftX || 0) / 100, sy = (fr.shiftY || 0) / 100;
+  const cxp = W / 2 - sx * W, cyp = H / 2 - sy * H;    // principal point moves; tag stays centred
   const cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
-  // R = Rz(roll) * Ry(yaw) * Rx(pitch)
   const Rx = [1, 0, 0, 0, cp, -sp, 0, sp, cp];
   const Ry = [cyw, 0, syw, 0, 1, 0, -syw, 0, cyw];
   const Rz = [cr, -sr, 0, sr, cr, 0, 0, 0, 1];
   const mul = (A, B) => { const C = new Array(9); for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i * 3 + j] = A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]; return C; };
   const R = mul(Rz, mul(Ry, Rx));
-  // plane point (X,Y,0): cam = R[:,0]*X + R[:,1]*Y + t ; pixel = f*cam.xy/cam.z + (W/2,H/2)
-  const t3 = [tx, ty, tz];
+  const half = 0.5 / tag.outerFrac;                    // half-span of the whole texture, plane units
+  // Near-plane clipping fix: if any part of the plane would be closer than NEAR (or behind the camera),
+  // push the whole plane straight back until its nearest point sits at NEAR.
+  let zmin = Infinity;
+  for (const [X, Y] of [[-half, -half], [half, -half], [half, half], [-half, half]]) zmin = Math.min(zmin, R[6] * X + R[7] * Y + tz);
+  if (zmin < NEAR) tz += NEAR - zmin;
+  const tx = sx * W * tz / f, ty = sy * H * tz / f;     // lateral offset so the tag projects to frame centre
   const Hm = [
-    f * R[0] + (W / 2) * R[6], f * R[1] + (W / 2) * R[7], f * t3[0] + (W / 2) * t3[2],
-    f * R[3] + (H / 2) * R[6], f * R[4] + (H / 2) * R[7], f * t3[1] + (H / 2) * t3[2],
-    R[6], R[7], t3[2],
+    f * R[0] + cxp * R[6], f * R[1] + cxp * R[7], f * tx + cxp * tz,
+    f * R[3] + cyp * R[6], f * R[4] + cyp * R[7], f * ty + cyp * tz,
+    R[6], R[7], tz,
   ];
   const Hi = inv3(Hm);
   const proj = (X, Y) => { const w = Hm[6] * X + Hm[7] * Y + Hm[8]; return [(Hm[0] * X + Hm[1] * Y + Hm[2]) / w, (Hm[3] * X + Hm[4] * Y + Hm[5]) / w]; };
-  const half = 0.5 / tag.outerFrac;            // half-span of whole texture in plane units
-  const corners = [proj(-0.5, -0.5), proj(0.5, -0.5), proj(0.5, 0.5), proj(-0.5, 0.5)]; // black square corners
+  const corners = [proj(-0.5, -0.5), proj(0.5, -0.5), proj(0.5, 0.5), proj(-0.5, 0.5)];
   const full = [proj(-half, -half), proj(half, -half), proj(half, half), proj(-half, half)];
   const xs = full.map(p => p[0]), ys = full.map(p => p[1]);
   const x0 = Math.max(0, Math.floor(Math.min(...xs)) - 1), x1 = Math.min(W - 1, Math.ceil(Math.max(...xs)) + 1);
@@ -185,8 +188,8 @@ export function renderFrame(tag, P, W, H, seed) {
   const sub = [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     let acc = 0, cov = 0;
-    for (const [sx, sy] of sub) {
-      const u = x + sx, v = y + sy;
+    for (const [ox, oy] of sub) {
+      const u = x + ox, v = y + oy;
       const w = Hi[6] * u + Hi[7] * v + Hi[8];
       if (w <= 0) continue;
       const X = (Hi[0] * u + Hi[1] * v + Hi[2]) / w, Y = (Hi[3] * u + Hi[4] * v + Hi[5]) / w;
@@ -202,6 +205,32 @@ export function renderFrame(tag, P, W, H, seed) {
     const o = (y * W + x) * 3, a = cov / 4, val = acc / cov;
     for (let c = 0; c < 3; c++) F[o + c] = F[o + c] * (1 - a) + val * a;
   }
+  const centroid = [corners.reduce((a, p) => a + p[0], 0) / 4, corners.reduce((a, p) => a + p[1], 0) / 4];
+  let area = 0; for (let i = 0; i < 4; i++) { const p = corners[i], q = corners[(i + 1) % 4]; area += p[0] * q[1] - q[0] * p[1]; }
+  const side = Math.max(3, Math.sqrt(Math.abs(area) / 2));
+  const truth = { corners, center: proj(0, 0), centroid, side };
+
+  // ---- lighting (scaled to the TAG, so the stress is felt where it matters) ----
+  const rn = Math.hypot(W / 2, H / 2);
+  if (P.light) {
+    const L = P.light, a = L.gradAng * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+    const tcx = truth.center[0], tcy = truth.center[1];
+    const shAng = rngLight() * 6.2832, shOff = (rngLight() - 0.5) * 0.8, sca = Math.cos(shAng), ssa = Math.sin(shAng);
+    const gx = tcx + (rngLight() - 0.5) * side * 0.9, gy = tcy + (rngLight() - 0.5) * side * 0.9, gs2 = 2 * (side * 0.45) ** 2;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const dx = x - tcx, dy = y - tcy;
+      let gain = Math.exp(L.grad * 4 * ((dx * ca + dy * sa) / side));          // up to ~55:1 across the tag
+      const vx = x - cxp, vy = y - cyp;
+      gain *= Math.max(0.02, 1 - L.vig * 1.5 * (vx * vx + vy * vy) / (rn * rn));
+      if (L.shadow > 0) {
+        const d = (dx * sca + dy * ssa) - shOff * side;
+        gain *= 1 - L.shadow * 0.95 * Math.max(0, Math.min(1, d / 1.5 + 0.5));
+      }
+      const gl = L.glare > 0 ? L.glare * 700 * Math.exp(-((x - gx) ** 2 + (y - gy) ** 2) / gs2) : 0;
+      const o = (y * W + x) * 3;
+      for (let c = 0; c < 3; c++) F[o + c] = Math.min(255, ((15 + F[o + c] * 0.85) * 1.1) * gain + gl);   // real ink is never pure black
+    }
+  }
 
   // ---- occlusion (drawn through a 2D canvas) --------------------------
   if (P.occ && P.occ.cover > 0) {
@@ -213,11 +242,11 @@ export function renderFrame(tag, P, W, H, seed) {
     const by0 = Math.min(...corners.map(p => p[1])), by1 = Math.max(...corners.map(p => p[1]));
     const bw = bx1 - bx0, bh = by1 - by0;
     const n = Math.max(1, Math.round(P.occ.count));
-    const area = P.occ.cover / 100 * bw * bh;
+    const area2 = P.occ.cover / 100 * bw * bh;
     for (let k = 0; k < n; k++) {
-      const a = area / n * (0.5 + rngOcc());
-      const shape = P.occ.shape >= 3 ? Math.floor(rngOcc() * 3) : Math.round(P.occ.shape);
-      const tone = P.occ.tone >= 3 ? Math.floor(rngOcc() * 3) : Math.round(P.occ.tone);
+      const a = area2 / n * (0.5 + rngOcc());
+      const shape = Number(P.occ.shape) >= 3 ? Math.floor(rngOcc() * 3) : Math.round(P.occ.shape);
+      const tone = Number(P.occ.tone) >= 3 ? Math.floor(rngOcc() * 3) : Math.round(P.occ.tone);
       const g = [0, 255, 128][tone];
       ctx.fillStyle = ctx.strokeStyle = `rgb(${g},${g},${g})`;
       const px = bx0 + rngOcc() * bw, py = by0 + rngOcc() * bh, ar = 0.5 + rngOcc() * 1.5;
@@ -231,38 +260,23 @@ export function renderFrame(tag, P, W, H, seed) {
   }
 
   let buf = F;
-  const sample = (src, x, y, o) => {              // bilinear, clamped
+  const samp = (src, x, y, c) => {                 // bilinear, one channel, clamped
     x = x < 0 ? 0 : x > W - 1 ? W - 1 : x; y = y < 0 ? 0 : y > H - 1 ? H - 1 : y;
     const ix = x | 0, iy = y | 0, fx = x - ix, fy = y - iy, ix1 = Math.min(W - 1, ix + 1), iy1 = Math.min(H - 1, iy + 1);
-    const a = (iy * W + ix) * 3, b = (iy * W + ix1) * 3, c = (iy1 * W + ix) * 3, d = (iy1 * W + ix1) * 3;
-    for (let k = 0; k < 3; k++) o[k] = (src[a + k] * (1 - fx) + src[b + k] * fx) * (1 - fy) + (src[c + k] * (1 - fx) + src[d + k] * fx) * fy;
+    return (src[(iy * W + ix) * 3 + c] * (1 - fx) + src[(iy * W + ix1) * 3 + c] * fx) * (1 - fy) + (src[(iy1 * W + ix) * 3 + c] * (1 - fx) + src[(iy1 * W + ix1) * 3 + c] * fx) * fy;
   };
 
-  // ---- lens bulge ------------------------------------------------------
-  if (P.lens && Math.abs(P.lens.bulge) > 1e-4) {
-    const k1 = P.lens.bulge, out = new Float32Array(W * H * 3), tmp = [0, 0, 0];
-    const rn = Math.hypot(W / 2, H / 2);
+  // ---- lens bulge + chromatic aberration (distortion centre = principal point) ----
+  if (P.lens && (Math.abs(P.lens.bulge) > 1e-4 || P.lens.ca > 1e-4)) {
+    const k1 = P.lens.bulge, ca = P.lens.ca || 0, out = new Float32Array(W * H * 3), chS = [1 + ca, 1, 1 - ca];
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const dx = (x + 0.5 - W / 2) / rn, dy = (y + 0.5 - H / 2) / rn, r2 = dx * dx + dy * dy, s = 1 + k1 * r2;
-      const sx = W / 2 + dx * s * rn - 0.5, sy = H / 2 + dy * s * rn - 0.5, o = (y * W + x) * 3;
-      if (sx < -1 || sy < -1 || sx > W || sy > H) { out[o] = out[o + 1] = out[o + 2] = bg; continue; }
-      sample(buf, sx, sy, tmp); out[o] = tmp[0]; out[o + 1] = tmp[1]; out[o + 2] = tmp[2];
+      const dx = (x + 0.5 - cxp) / rn, dy = (y + 0.5 - cyp) / rn, s = 1 + k1 * (dx * dx + dy * dy), o = (y * W + x) * 3;
+      for (let c = 0; c < 3; c++) {
+        const sx2 = cxp + dx * s * chS[c] * rn - 0.5, sy2 = cyp + dy * s * chS[c] * rn - 0.5;
+        out[o + c] = (sx2 < -1 || sy2 < -1 || sx2 > W || sy2 > H) ? bg : samp(buf, sx2, sy2, c);
+      }
     }
     buf = out;
-  }
-
-  // ---- lighting --------------------------------------------------------
-  if (P.light) {
-    const L = P.light, a = L.gradAng * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), rn = Math.hypot(W / 2, H / 2);
-    const gx = W * (0.15 + 0.7 * mulberry32(seed ^ 0x77)()), gy = H * (0.15 + 0.7 * mulberry32(seed ^ 0x78)());
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const dx = x - W / 2, dy = y - H / 2;
-      let m = 1 + L.grad * ((dx * ca + dy * sa) / rn);        // −grad … +grad across the frame
-      m *= 1 - L.vig * (dx * dx + dy * dy) / (rn * rn);
-      const o = (y * W + x) * 3;
-      const gl = L.glare > 0 ? L.glare * 255 * Math.exp(-((x - gx) ** 2 + (y - gy) ** 2) / (2 * (H * 0.18) ** 2)) : 0;
-      buf[o] = buf[o] * m + gl; buf[o + 1] = buf[o + 1] * m + gl; buf[o + 2] = buf[o + 2] * m + gl;
-    }
   }
 
   // ---- motion blur / defocus ------------------------------------------
@@ -286,43 +300,20 @@ export function renderFrame(tag, P, W, H, seed) {
 
   // ---- exposure --------------------------------------------------------
   if (P.expo) {
-    const E = P.expo, mul = Math.pow(2, E.ev);
+    const E = P.expo, m = Math.pow(2, E.ev);
+    if (buf === F) buf = new Float32Array(F);
     for (let i = 0; i < W * H * 3; i++) {
       let v = Math.min(255, Math.max(0, buf[i])) / 255;
-      v = Math.pow(v, E.gamma) * mul;
+      v = Math.pow(v, E.gamma) * m;
       v = (v - 0.5) * E.contrast + 0.5;
       buf[i] = Math.min(255, Math.max(0, v * 255));
     }
   }
 
-  // ---- low resolution / mosaic ----------------------------------------
-  if (P.res && P.res.block >= 1.5) {
-    const bsz = Math.round(P.res.block), out = new Float32Array(W * H * 3);
-    const bw = Math.ceil(W / bsz), bh = Math.ceil(H / bsz), small = new Float32Array(bw * bh * 3);
-    for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
-      let r = 0, g = 0, b = 0, n = 0;
-      for (let y = by * bsz; y < Math.min(H, by * bsz + bsz); y++) for (let x = bx * bsz; x < Math.min(W, bx * bsz + bsz); x++) { const s = (y * W + x) * 3; r += buf[s]; g += buf[s + 1]; b += buf[s + 2]; n++; }
-      const o = (by * bw + bx) * 3; small[o] = r / n; small[o + 1] = g / n; small[o + 2] = b / n;
-    }
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const o = (y * W + x) * 3;
-      if (P.res.mosaic >= 0.5) { const s = (Math.floor(y / bsz) * bw + Math.floor(x / bsz)) * 3; out[o] = small[s]; out[o + 1] = small[s + 1]; out[o + 2] = small[s + 2]; }
-      else {
-        const fx = Math.min(bw - 1, Math.max(0, (x + 0.5) / bsz - 0.5)), fy = Math.min(bh - 1, Math.max(0, (y + 0.5) / bsz - 0.5));
-        const ix = fx | 0, iy = fy | 0, ax = fx - ix, ay = fy - iy, ix1 = Math.min(bw - 1, ix + 1), iy1 = Math.min(bh - 1, iy + 1);
-        for (let k = 0; k < 3; k++) out[o + k] = (small[(iy * bw + ix) * 3 + k] * (1 - ax) + small[(iy * bw + ix1) * 3 + k] * ax) * (1 - ay) + (small[(iy1 * bw + ix) * 3 + k] * (1 - ax) + small[(iy1 * bw + ix1) * 3 + k] * ax) * ay;
-      }
-    }
-    buf = out;
-  }
-  if (P.res && P.res.levels < 256) {
-    const q = 255 / (Math.round(P.res.levels) - 1);
-    for (let i = 0; i < W * H * 3; i++) buf[i] = Math.round(buf[i] / q) * q;
-  }
-
   // ---- sensor noise ----------------------------------------------------
   if (P.noise) {
     const N = P.noise, spP = N.sp / 100;
+    if (buf === F) buf = new Float32Array(F);
     for (let i = 0; i < W * H; i++) {
       const o = i * 3, l = N.luma > 0 ? randn(rngNoise) * N.luma : 0;
       for (let c = 0; c < 3; c++) buf[o + c] += l + (N.chroma > 0 ? randn(rngNoise) * N.chroma : 0);
@@ -337,7 +328,7 @@ export function renderFrame(tag, P, W, H, seed) {
     rgba[i * 4] = r; rgba[i * 4 + 1] = g; rgba[i * 4 + 2] = b; rgba[i * 4 + 3] = 255;
     gray[i] = (r * 299 + g * 587 + b * 114 + 500) / 1000 | 0;
   }
-  return { rgba, gray, W, H, truth: { corners, center: proj(0, 0), side: Math.hypot(corners[1][0] - corners[0][0], corners[1][1] - corners[0][1]) } };
+  return { rgba, gray, W, H, truth };
 }
 
 function boxBlur(src, W, H, r, horiz) {
