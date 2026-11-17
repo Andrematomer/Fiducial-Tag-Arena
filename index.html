@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fiducial Tag Arena</title>
+<meta name="description" content="Compare fiducial marker detectors in your browser under synthetic camera conditions: blur, noise, occlusion, perspective, lighting and more.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <section class="left">
+    <header>
+      <div>
+        <h1>Fiducial Tag Arena</h1>
+        <p>Stress-test fiducial marker detectors in your browser. Every frame is generated at runtime and every tag gets the exact same degraded conditions. Tick a tag to enable it (its detector downloads only then), then press <b>Run once</b>.</p>
+      </div>
+      <a class="dl" href="https://github.com/Andrematomer/Fiducial-Tag-Arena/releases" target="_blank" rel="noopener">⬇ Download desktop app<small>more tags · not released yet</small></a>
+    </header>
+
+    <div id="grid" class="grid" aria-live="polite"></div>
+
+    <section class="panel notes">
+      <h2>How it works</h2>
+      <ul>
+        <li><b>One detection per tick, not a live loop.</b> Each enabled tag is run one at a time (the highlighted window), starting from a different tag every tick, so no two detectors compete for the CPU while being timed.</li>
+        <li><b>Run once = one tick.</b> Every tick draws a new seed, so random IDs, occluder placement, noise and (in Random mode) all parameters change, but identically for every tag.</li>
+        <li><b>Timing</b> covers only the detector call. Rendering the frame is never included. It is not perfectly even: ArUco’s call also includes its own RGBA→gray conversion, and AprilTag’s includes copying the image into WASM memory and parsing its JSON result. Browser timers are coarse (about 0.1 ms).</li>
+        <li><b>Success</b> means the detector returned the correct ID with its centre within 25% of the tag side from the true centre. A miss, a wrong ID or a wrong place all count as failure. The strip under each tag shows the last 128 ticks; the percentage covers all ticks.</li>
+        <li><b>Desktop app.</b> Native tags run as separate programs that the app starts (like a chess GUI talking to Stockfish). Their time is measured inside each program around its detector call only, so process start-up and pipe transfer are not counted.</li>
+        <li><b>Camera model.</b> Tag size is the zoom; the lens-shift sliders work like Blender’s camera shift: the tag stays in the middle of the frame while being viewed off-axis, which adds perspective and lens distortion as if it were near the frame edge. If a rotated plane would pass through the camera it is pushed back automatically.</li>
+        <li><b>Preview.</b> The top-right window shows a blank plane with exactly the slider values (the maximum in Random mode). Use the three round buttons on it: drag to rotate, zoom, or shift.</li>
+        <li><b>Not apples-to-apples by design.</b> Tags differ in ID capacity, pose output and intended use. This page measures only how reliably each one is found under bad conditions. Results reflect the JavaScript/WASM implementations used here, not necessarily the original papers’ detectors.</li>
+      </ul>
+      <h2>Tags not included anywhere</h2>
+      <ul id="skipped"></ul>
+      <p class="foot">Detectors: AprilTag (BSD-3-Clause, AprilRobotics / CONIX apriltag-js-standalone), js-aruco2 (MIT). Licences are in <code>vendor/</code>.</p>
+    </section>
+  </section>
+
+  <aside class="right">
+    <div class="top">
+      <div class="cell pv">
+        <div class="chead"><b>Preview</b><em id="pvInfo"></em></div>
+        <div class="view">
+          <canvas id="pv" width="128" height="128"></canvas>
+          <div class="gizmo" aria-label="Viewport navigation">
+            <button id="gRot" title="Drag to rotate the plane" aria-label="Rotate"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button id="gZoom" title="Drag up/down to zoom" aria-label="Zoom"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5.5 5.5M8 10.5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+            <button id="gPan" title="Drag to shift the lens" aria-label="Shift"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="runbar">
+        <button id="runOnce" class="primary">Run once</button>
+        <span class="ticks"><input id="ticks" type="number" value="32" min="1" max="500" aria-label="Number of ticks"><button id="runTicks" class="primary">Run ticks</button></span>
+        <button id="stop" disabled>Stop</button>
+        <button id="clear">Clear</button>
+        <span id="status" aria-live="polite"></span>
+      </div>
+    </div>
+    <div class="scroll" id="cats"></div>
+  </aside>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

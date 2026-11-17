@@ -1,0 +1,9 @@
+{
+  "key": "selftest",
+  "name": "Self-test (toy, plumbing only)",
+  "family": "Test only",
+  "license": "project licence",
+  "note": "Not a real marker system. Development builds only.",
+  "exe": "../../detectors-src/selftest/target/release/arena-selftest.exe",
+  "idCount": 256
+}

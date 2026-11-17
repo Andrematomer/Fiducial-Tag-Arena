@@ -1,0 +1,13 @@
+{
+  "name": "fiducial-tag-arena-app",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "sync": "node scripts/sync-web.mjs",
+    "dev": "node scripts/sync-web.mjs && tauri dev",
+    "build": "node scripts/sync-web.mjs && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

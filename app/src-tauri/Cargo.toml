@@ -1,0 +1,23 @@
+[package]
+name = "fiducial-tag-arena"
+version = "0.1.0"
+description = "Fiducial Tag Arena desktop app"
+edition = "2021"
+
+[lib]
+name = "fiducial_tag_arena_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"
+arena-core = { path = "../../crates/arena-core" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

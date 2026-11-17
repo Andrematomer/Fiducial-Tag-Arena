@@ -1,0 +1,77 @@
+name: Desktop app
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Protocol + UI tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/arena-core
+            detectors-src/selftest
+      - run: cargo build --release --manifest-path detectors-src/selftest/Cargo.toml
+      - name: arena-core round-trip test
+        run: cargo test --manifest-path crates/arena-core/Cargo.toml
+        env:
+          ARENA_TEST_EXE: ${{ github.workspace }}/detectors-src/selftest/target/release/arena-selftest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+      - name: Browser end-to-end test (plain + mock desktop)
+        run: python test/e2e.py "$GITHUB_WORKSPACE/detectors-src/selftest/target/release/arena-selftest"
+
+  windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Install npm dependencies
+        working-directory: app
+        run: npm ci
+      - name: Build (Tauri, NSIS installer)
+        working-directory: app
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fiducial-Tag-Arena-windows
+          path: app/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tests, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Fiducial-Tag-Arena-windows
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          prerelease: true
+          generate_release_notes: true
